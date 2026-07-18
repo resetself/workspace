@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux-musl
+            name: x86_64-linux
+          - os: ubuntu-24.04-arm
+            target: aarch64-linux-musl
+            name: aarch64-linux
+          - os: macos-latest
+            target: aarch64-macos
+            name: aarch64-macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: build
+        run: zig build -Doptimize=ReleaseSafe -Dtarget=${{ matrix.target }}
+
+      - name: package
+        run: |
+          cd zig-out/bin
+          tar czf ../../wksp-${{ matrix.name }}.tar.gz wksp
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wksp-${{ matrix.name }}
+          path: wksp-${{ matrix.name }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wksp-*
+          merge-multiple: true
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wksp-*.tar.gz
